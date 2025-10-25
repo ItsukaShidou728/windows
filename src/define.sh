@@ -24,6 +24,7 @@ parseVersion() {
     VERSION="${VERSION:1:-1}"
   fi
 
+  VERSION=$(expr "$VERSION" : "^\ *\(.*[^ ]\)\ *$")
   [ -z "$VERSION" ] && VERSION="win11"
 
   case "${VERSION,,}" in
@@ -33,11 +34,11 @@ parseVersion() {
     "11e" | "win11e" | "windows11e" | "windows 11e" )
       VERSION="win11x64-enterprise-eval"
       ;;
-    "11i" | "11iot" | "iot11" | "win11i" | "win11-iot" | "win11x64-iot" | "win11x64-enterprise-iot-eval" )
+    "11i" | "11iot" | "iot11" | "win11i" | "win11-iot" | "win11x64-iot" )
       VERSION="win11x64-enterprise-iot-eval"
       [ -z "$DETECTED" ] && DETECTED="win11x64-iot"
       ;;
-    "11l" | "11ltsc" | "ltsc11" | "win11l" | "win11-ltsc" | "win11x64-ltsc" | "win11x64-enterprise-ltsc-eval" )
+    "11l" | "11ltsc" | "ltsc11" | "win11l" | "win11-ltsc" | "win11x64-ltsc" )
       VERSION="win11x64-enterprise-ltsc-eval"
       [ -z "$DETECTED" ] && DETECTED="win11x64-ltsc"
       ;;
@@ -47,11 +48,11 @@ parseVersion() {
     "10e" | "win10e" | "windows10e" | "windows 10e" )
       VERSION="win10x64-enterprise-eval"
       ;;
-    "10i" | "10iot" | "iot10" | "win10i" | "win10-iot" | "win10x64-iot" | "win10x64-enterprise-iot-eval" )
+    "10i" | "10iot" | "iot10" | "win10i" | "win10-iot" | "win10x64-iot" )
       VERSION="win10x64-enterprise-iot-eval"
       [ -z "$DETECTED" ] && DETECTED="win10x64-iot"
       ;;
-    "10l" | "10ltsc" | "ltsc10" | "win10l" | "win10-ltsc" | "win10x64-ltsc" | "win10x64-enterprise-ltsc-eval" )
+    "10l" | "10ltsc" | "ltsc10" | "win10l" | "win10-ltsc" | "win10x64-ltsc" )
       VERSION="win10x64-enterprise-ltsc-eval"
       [ -z "$DETECTED" ] && DETECTED="win10x64-ltsc"
       ;;
@@ -134,6 +135,10 @@ parseVersion() {
     "2003" | "2003r2" | "win2003" | "win2003r2" | "windows2003" | "windows 2003" )
       VERSION="win2003r2"
       ;;
+    "nano11" | "nano 11" )
+      VERSION="nano11"
+      [ -z "$DETECTED" ] && DETECTED="win11x64"
+      ;;      
     "core11" | "core 11" )
       VERSION="core11"
       [ -z "$DETECTED" ] && DETECTED="win11x64"
@@ -431,6 +436,7 @@ printVersion() {
     "tiny11"* ) desc="Tiny 11" ;;
     "tiny10"* ) desc="Tiny 10" ;;
     "core11"* ) desc="Core 11" ;;
+    "nano11"* ) desc="Nano 11" ;;
     "win7"* ) desc="Windows 7" ;;
     "win8"* ) desc="Windows 8" ;;
     "win10"* ) desc="Windows 10" ;;
@@ -569,6 +575,9 @@ fromFile() {
     *"winvista"* | *"win_vista"* | *"windowsvista"* | *"windows_vista"* )
       id="winvista${arch}"
       ;;
+    "nano11"* | "nano_11"* )
+      id="nano11"
+      ;;
     "tiny11core"* | "tiny11_core"* | "tiny_11_core"* )
       id="core11"
       ;;
@@ -693,26 +702,9 @@ switchEdition() {
 
   local id="$1"
 
-  case "${id,,}" in
-    "win11${PLATFORM,,}-enterprise-eval" )
-      DETECTED="win11${PLATFORM,,}-enterprise"
-      ;;
-    "win10${PLATFORM,,}-enterprise-eval" )
-      DETECTED="win10${PLATFORM,,}-enterprise"
-      ;;
-    "win81${PLATFORM,,}-enterprise-eval" )
-      DETECTED="win81${PLATFORM,,}-enterprise"
-      ;;
-    "win7${PLATFORM,,}" | "win7${PLATFORM,,}-enterprise-eval" )
-      DETECTED="win7${PLATFORM,,}-enterprise"
-      ;;
-    "win2025-eval" ) DETECTED="win2025" ;;
-    "win2022-eval" ) DETECTED="win2022" ;;
-    "win2019-eval" ) DETECTED="win2019" ;;
-    "win2016-eval" ) DETECTED="win2016" ;;
-    "win2012r2-eval" ) DETECTED="win2012r2" ;;
-    "win2008r2-eval" ) DETECTED="win2008r2" ;;
-  esac
+  if [[ "${id,,}" == *"-eval" ]]; then
+    [ -z "$DETECTED" ] && DETECTED="${id::-5}"
+  fi
 
   return 0
 }
@@ -726,17 +718,18 @@ getMido() {
   local sum=""
   local size=""
 
-  [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-us" ]] && return 0
+  [[ "${lang,,}" != "en" && "${lang,,}" != "en-us" ]] && return 0
 
   case "${id,,}" in
     "win11x64" )
-      size=5819484160
-      sum="b56b911bf18a2ceaeb3904d87e7c770bdf92d3099599d61ac2497b91bf190b11"
+      size=7736125440
+      sum="d141f6030fed50f75e2b03e1eb2e53646c4b21e5386047cb860af5223f102a32"
+      url="https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26200.6584.250915-1905.25h2_ge_release_svc_refresh_CLIENT_CONSUMER_x64FRE_en-us.iso"
       ;;
     "win11x64-enterprise-eval" )
-      size=4295096320
-      sum="dad633276073f14f3e0373ef7e787569e216d54942ce522b39451c8f2d38ad43"
-      url="https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1.240331-1435.ge_release_CLIENTENTERPRISEEVAL_OEMRET_A64FRE_en-us.iso"
+      size=7092807680
+      sum="a61adeab895ef5a4db436e0a7011c92a2ff17bb0357f58b13bbc4062e535e7b9"
+      url="https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26200.6584.250915-1905.25h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
       ;;
     "win11x64-enterprise-iot-eval" | "win11x64-enterprise-ltsc-eval" )
       size=5060020224
@@ -820,7 +813,7 @@ getLink1() {
   local size=""
   local host="https://dl.bobpony.com/windows"
 
-  [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-us" ]] && return 0
+  [[ "${lang,,}" != "en" && "${lang,,}" != "en-us" ]] && return 0
 
   case "${id,,}" in
     "win11x64" | "win11x64-enterprise" | "win11x64-enterprise-eval" )
@@ -828,12 +821,12 @@ getLink1() {
       sum="aa1ad990f930d907b7a34ea897abbb0dfbe47552ca8acc146f92e40381839e05"
       url="11/en-us_windows_11_24h2_x64.iso"
       ;;
-    "win11x64-iot" | "win11x64-enterprise-iot-eval" )
+    "win11x64-iot" | "win11x64-enterprise-iot" | "win11x64-enterprise-iot-eval" )
       size=5144817664
       sum="4f59662a96fc1da48c1b415d6c369d08af55ddd64e8f1c84e0166d9e50405d7a"
       url="11/X23-81951_26100.1742.240906-0331.ge_release_svc_refresh_CLIENT_ENTERPRISES_OEM_x64FRE_en-us.iso"
       ;;
-    "win11x64-ltsc" | "win11x64-enterprise-ltsc-eval" )
+    "win11x64-ltsc" | "win11x64-enterprise-ltsc" | "win11x64-enterprise-ltsc-eval" )
       size=5144817664
       sum="4f59662a96fc1da48c1b415d6c369d08af55ddd64e8f1c84e0166d9e50405d7a"
       url="11/X23-81951_26100.1742.240906-0331.ge_release_svc_refresh_CLIENT_ENTERPRISES_OEM_x64FRE_en-us.iso"
@@ -843,12 +836,12 @@ getLink1() {
       sum="557871965263d0fd0a1ea50b5d0d0d7cb04a279148ca905c1c675c9bc0d5486c"
       url="10/en-us_windows_10_22h2_x64.iso"
       ;;
-    "win10x64-iot" | "win10x64-enterprise-iot-eval" )
+    "win10x64-iot" | "win10x64-enterprise-iot" | "win10x64-enterprise-iot-eval" )
       size=4851668992
       sum="a0334f31ea7a3e6932b9ad7206608248f0bd40698bfb8fc65f14fc5e4976c160"
       url="10/en-us_windows_10_iot_enterprise_ltsc_2021_x64_dvd_257ad90f.iso"
       ;;
-    "win10x64-ltsc" | "win10x64-enterprise-ltsc-eval" )
+    "win10x64-ltsc" | "win10x64-enterprise-ltsc" | "win10x64-enterprise-ltsc-eval" )
       size=4899461120
       sum="c90a6df8997bf49e56b9673982f3e80745058723a707aef8f22998ae6479597d"
       url="10/en-us_windows_10_enterprise_ltsc_2021_x64_dvd_d289cf96.iso"
@@ -864,14 +857,14 @@ getLink1() {
       url="8.x/8.1/en_windows_8.1_enterprise_with_update_x64_dvd_6054382.iso"
       ;;
     "win2025" | "win2025-eval" )
-      size=5307176960
-      sum="2293897341febdcea599f5412300b470b5288c6fd2b89666a7b27d283e8d3cf3"
-      url="server/2025/en-us_windows_server_2025_preview_x64_dvd_ce9eb1a5.iso"
+      size=6786627584
+      sum="bf3ef0849c7cb5e818e1035b7466d206af5aa227ace1a3f4b0de2bf00d2e2144"
+      url="server/2025/en-us_windows_server_2025_updated_april_2025_x64_dvd_ea86301d.iso"
       ;;
     "win2022" | "win2022-eval" )
-      size=5365624832
-      sum="c3c57bb2cf723973a7dcfb1a21e97dfa035753a7f111e348ad918bb64b3114db"
-      url="server/2022/en-us_windows_server_2022_updated_jan_2024_x64_dvd_2b7a0c9f.iso"
+      size=6005706752
+      sum="cea2cb2c09de9910c236e64eae3a801c55e9c77ec25e8d81585e3a4581d24bfb"
+      url="server/2022/en-us_windows_server_2022_updated_april_2025_x64_dvd_3f755ec1.iso"
       ;;
     "win2019" | "win2019-eval" )
       size=5575774208
@@ -964,7 +957,7 @@ getLink2() {
   local size=""
   local host="https://files.dog/MSDN"
 
-  [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-us" ]] && return 0
+  [[ "${lang,,}" != "en" && "${lang,,}" != "en-us" ]] && return 0
 
   case "${id,,}" in
     "win81x64" )
@@ -1063,7 +1056,7 @@ getLink3() {
   local size=""
   local host="https://nixsys.com/drivers"
 
-  [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-us" ]] && return 0
+  [[ "${lang,,}" != "en" && "${lang,,}" != "en-us" ]] && return 0
 
   case "${id,,}" in
     "win7x64" | "win7x64-ultimate" )
@@ -1106,18 +1099,23 @@ getLink4() {
   local size=""
   local host="https://archive.org/download"
 
-  [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-us" ]] && return 0
+  [[ "${lang,,}" != "en" && "${lang,,}" != "en-us" ]] && return 0
 
   case "${id,,}" in
+    "nano11" )
+      size=2463565824
+      sum="a1e0614372768cbe2d24de74b78a4a97bc1017ea5080dfed1d2125e4a527eb1a"
+      url="nano11_25h2/nano11%2025h2.iso"
+      ;;
     "core11" )
-      size=2159738880
-      sum="78f0f44444ff95b97125b43e560a72e0d6ce0a665cf9f5573bf268191e5510c1"
-      url="tiny-11-core-x-64-beta-1/tiny11%20core%20x64%20beta%201.iso"
+      size=3176654848
+      sum="29c055fcfb7b089abd9e007e7abe4bb82c70a03aac9d65e56a38b87ab32d04d2"
+      url="tiny11_25H2/tiny11core_25H2_Oct25.iso"
       ;;
     "tiny11" )
-      size=3788177408
-      sum="a028800a91addc35d8ae22dce7459b67330f7d69d2f11c70f53c0fdffa5b4280"
-      url="tiny11-2311/tiny11%202311%20x64.iso"
+      size=5514559488
+      sum="92484f2b7f707e42383294402a9eabbadeaa5ede80ac633390ae7f3537e36275"
+      url="tiny11_25H2/tiny11_25H2_Oct25.iso"
       ;;
     "tiny10" )
       size=3839819776
@@ -1125,21 +1123,21 @@ getLink4() {
       url="tiny-10-23-h2/tiny10%20x64%2023h2.iso"
       ;;
     "win11x64" )
-      size=5819484160
-      sum="b56b911bf18a2ceaeb3904d87e7c770bdf92d3099599d61ac2497b91bf190b11"
-      url="windows-11-24h2-x64/Windows%2011%2024H2%20x64.iso"
+      size=7736125440
+      sum="d141f6030fed50f75e2b03e1eb2e53646c4b21e5386047cb860af5223f102a32"
+      url="W11x64_26200.6584/26200.6584.250915-1905.25h2_ge_release_svc_refresh_CLIENT_CONSUMER_x64FRE_en-us.iso"
       ;;
     "win11x64-enterprise" | "win11x64-enterprise-eval" )
       size=6209064960
       sum="c8dbc96b61d04c8b01faf6ce0794fdf33965c7b350eaa3eb1e6697019902945c"
       url="Windows11Enterprise23H2x64/22631.2428.231001-0608.23H2_NI_RELEASE_SVC_REFRESH_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso"
       ;;
-    "win11x64-iot" | "win11x64-enterprise-iot-eval" )
+    "win11x64-iot" | "win11x64-enterprise-iot" | "win11x64-enterprise-iot-eval" )
       size=5144817664
       sum="4f59662a96fc1da48c1b415d6c369d08af55ddd64e8f1c84e0166d9e50405d7a"
       url="Windows11LTSC/X23-81951_26100.1742.240906-0331.ge_release_svc_refresh_CLIENT_ENTERPRISES_OEM_x64FRE_en-us.iso"
       ;;
-    "win11x64-ltsc" | "win11x64-enterprise-ltsc-eval" )
+    "win11x64-ltsc" | "win11x64-enterprise-ltsc" | "win11x64-enterprise-ltsc-eval" )
       size=5144817664
       sum="4f59662a96fc1da48c1b415d6c369d08af55ddd64e8f1c84e0166d9e50405d7a"
       url="Windows11LTSC/X23-81951_26100.1742.240906-0331.ge_release_svc_refresh_CLIENT_ENTERPRISES_OEM_x64FRE_en-us.iso"
@@ -1149,12 +1147,12 @@ getLink4() {
       sum="7847abd6f39abd02dc8089c4177d354f9eb66fa0ee2fe8ae20e596e675d1ab67"
       url="Windows-10-22H2-July-2024-64-bit-DVD-English/en-us_windows_10_business_editions_version_22h2_updated_july_2024_x64_dvd_c004521a.iso"
       ;;
-    "win10x64-iot" | "win10x64-enterprise-iot-eval" )
+    "win10x64-iot" | "win10x64-enterprise-iot" | "win10x64-enterprise-iot-eval" )
       size=4851668992
       sum="a0334f31ea7a3e6932b9ad7206608248f0bd40698bfb8fc65f14fc5e4976c160"
       url="en-us_windows_10_iot_enterprise_ltsc_2021_x64_dvd_257ad90f_202411/en-us_windows_10_iot_enterprise_ltsc_2021_x64_dvd_257ad90f.iso"
       ;;
-    "win10x64-ltsc" | "win10x64-enterprise-ltsc-eval" )
+    "win10x64-ltsc" | "win10x64-enterprise-ltsc" | "win10x64-enterprise-ltsc-eval" )
       size=4899461120
       sum="c90a6df8997bf49e56b9673982f3e80745058723a707aef8f22998ae6479597d"
       url="en-us_windows_10_enterprise_ltsc_2021_x64_dvd_d289cf96_202302/en-us_windows_10_enterprise_ltsc_2021_x64_dvd_d289cf96.iso"
@@ -1313,6 +1311,8 @@ isMido() {
   local lang="$2"
   local sum
 
+  [[ "${MIDO:-}" == [Nn]* ]] && return 1
+
   sum=$(getMido "$id" "en" "sum")
   [ -n "$sum" ] && return 0
 
@@ -1323,6 +1323,8 @@ isESD() {
 
   local id="$1"
   local lang="$2"
+
+  [[ "${ESD:-}" == [Nn]* ]] && return 1
 
   case "${id,,}" in
     "win11${PLATFORM,,}" | "win10${PLATFORM,,}" )
@@ -1405,7 +1407,7 @@ prepareInstall() {
     error "Failed to locate directory \"$target\" in $desc ISO image!" && return 1
   fi
 
-  if [[ "${driver,,}" == "xp" ]] || [[ "${driver,,}" == "2k3" ]]; then
+  if [[ "${driver,,}" == "xp" || "${driver,,}" == "2k3" ]]; then
 
     local msg="Adding drivers to image..."
     info "$msg" && html "$msg"
@@ -1582,9 +1584,6 @@ prepareInstall() {
   [ -n "$PASSWORD" ] && password=$(echo "$PASSWORD" | sed 's/"//g')
   [ -z "$password" ] && password="admin"
 
-  local ip="20.20.20.1"
-  [ -n "${VM_NET_IP:-}" ] && ip="${VM_NET_IP%.*}.1"
-
   find "$target" -maxdepth 1 -type f -iname winnt.sif -exec rm {} \;
 
   {       echo "[Data]"
@@ -1621,7 +1620,7 @@ prepareInstall() {
           echo "[UserData]"
           echo "    FullName=\"$username\""
           echo "    ComputerName=\"*\""
-          echo "    OrgName=\"Windows for Docker\""
+          echo "    OrgName=\"$APP for $ENGINE\""
           echo "    $KEY"
           echo ""
           echo "[Identification]"
@@ -1767,19 +1766,18 @@ prepareInstall() {
           echo ""
           echo "Call Domain.MoveHere(LocalAdminADsPath, \"$username\")"
           echo ""
-          echo "With (CreateObject(\"Scripting.FileSystemObject\"))"
-          echo "  SysRoot = WshShell.ExpandEnvironmentStrings(\"%SystemRoot%\")"
-          echo "  Set oFile = .OpenTextFile(SysRoot & \"\system32\drivers\etc\hosts\", 8, true)"
-          echo "  oFile.Write(\"$ip      host.lan\")"
-          echo "  oFile.Close()"
-          echo "  Set oFile = Nothing"
+          echo "Set oLink = WshShell.CreateShortcut(WshShell.ExpandEnvironmentStrings(\"%userprofile%\\Desktop\\Shared.lnk\"))"
+          echo "With oLink"
+          echo "  .TargetPath = \"\\\\host.lan\\Data\""
+          echo "  .Save"
           echo "End With"
+          echo "Set oLink = Nothing"
           echo ""
-  } | unix2dos > "$dir/\$OEM\$/admin.vbs"
+  } | unix2dos > "$dir/\$OEM\$/install.vbs"
 
   {       echo "[COMMANDS]"
           echo "\"REGEDIT /s install.reg\""
-          echo "\"Wscript admin.vbs\""
+          echo "\"Wscript install.vbs\""
           echo ""
   } | unix2dos > "$dir/\$OEM\$/cmdlines.txt"
 
@@ -1882,6 +1880,10 @@ skipVersion() {
   esac
 
   return 1
+}
+
+isCompatible() {
+  return 0
 }
 
 setMachine() {

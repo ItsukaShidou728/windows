@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+: "${QEMU_TIMEOUT:="110"}"  # QEMU Termination timeout
+
 # Configure QEMU for graceful shutdown
 
 QEMU_TERM=""
-QEMU_PORT=7100
-QEMU_TIMEOUT=110
 QEMU_DIR="/run/shm"
 QEMU_PID="$QEMU_DIR/qemu.pid"
 QEMU_PTY="$QEMU_DIR/qemu.pty"
@@ -74,6 +74,7 @@ ready() {
 finish() {
 
   local pid
+  local cnt=0
   local reason=$1
 
   touch "$QEMU_END"
@@ -81,20 +82,32 @@ finish() {
   if [ -s "$QEMU_PID" ]; then
 
     pid=$(<"$QEMU_PID")
-    error "Forcefully terminating Windows, reason: $reason..."
+    echo && error "Forcefully terminating Windows, reason: $reason..."
     { kill -15 "$pid" || true; } 2>/dev/null
 
     while isAlive "$pid"; do
+
       sleep 1
+      cnt=$((cnt+1))
+
       # Workaround for zombie pid
       [ ! -s "$QEMU_PID" ] && break
+
+      if [ "$cnt" == "5" ]; then
+        echo && error "QEMU did not terminate itself, forcefully killing process..."
+        { kill -9 "$pid" || true; } 2>/dev/null
+      fi
+
     done
+
   fi
 
   if [ ! -f "$STORAGE/windows.boot" ] && [ -f "$BOOT" ]; then
     # Remove CD-ROM ISO after install
     if ready; then
-      touch "$STORAGE/windows.boot"
+      local file="$STORAGE/windows.boot"
+      touch "$file"
+      ! setOwner "$file" && error "Failed to set the owner for \"$file\" !"
       if [[ "$REMOVE" != [Nn]* ]]; then
         rm -f "$BOOT" 2>/dev/null || true
       fi
@@ -103,11 +116,19 @@ finish() {
 
   pid="/var/run/tpm.pid"
   [ -s "$pid" ] && pKill "$(<"$pid")"
+  rm -f "$pid"
 
   pid="/var/run/wsdd.pid"
   [ -s "$pid" ] && pKill "$(<"$pid")"
+  rm -f "$pid"
 
-  fKill "smbd"
+  pid="/var/run/samba/nmbd.pid"
+  [ -s "$pid" ] && pKill "$(<"$pid")"
+  rm -f "$pid"
+
+  pid="/var/run/samba/smbd.pid"
+  [ -s "$pid" ] && pKill "$(<"$pid")"
+  rm -f "$pid"
 
   closeNetwork
 
@@ -139,7 +160,7 @@ terminal() {
   fi
 
   if [ ! -c "$dev" ]; then
-    dev=$(echo 'info chardev' | nc -q 1 -w 1 localhost "$QEMU_PORT" | tr -d '\000')
+    dev=$(echo 'info chardev' | nc -q 1 -w 1 localhost "$MON_PORT" | tr -d '\000')
     dev="${dev#*serial0}"
     dev="${dev#*pty:}"
     dev="${dev%%$'\n'*}"
@@ -188,7 +209,7 @@ _graceful_shutdown() {
   fi
 
   # Send ACPI shutdown signal
-  echo 'system_powerdown' | nc -q 1 -w 1 localhost "${QEMU_PORT}" > /dev/null
+  echo 'system_powerdown' | nc -q 1 -w 1 localhost "$MON_PORT" > /dev/null
 
   local cnt=0
   while [ "$cnt" -lt "$QEMU_TIMEOUT" ]; do
@@ -203,7 +224,7 @@ _graceful_shutdown() {
     info "Waiting for Windows to shutdown... ($cnt/$QEMU_TIMEOUT)"
 
     # Send ACPI shutdown signal
-    echo 'system_powerdown' | nc -q 1 -w 1 localhost "${QEMU_PORT}" > /dev/null
+    echo 'system_powerdown' | nc -q 1 -w 1 localhost "$MON_PORT" > /dev/null
 
   done
 
@@ -215,7 +236,7 @@ _graceful_shutdown() {
 }
 
 SERIAL="pty"
-MONITOR="telnet:localhost:$QEMU_PORT,server,nowait,nodelay"
+MONITOR="telnet:localhost:$MON_PORT,server,nowait,nodelay"
 MONITOR+=" -daemonize -D $QEMU_LOG -pidfile $QEMU_PID"
 
 _trap _graceful_shutdown SIGTERM SIGHUP SIGINT SIGABRT SIGQUIT

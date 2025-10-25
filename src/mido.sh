@@ -182,6 +182,7 @@ download_windows_eval() {
   local desc="$3"
   local filter=""
   local culture=""
+  local compare=""
   local language=""
   local user_agent=""
   local enterprise_type=""
@@ -254,7 +255,7 @@ download_windows_eval() {
 
   iso_download_links=$(echo "$iso_download_page_html" | grep -io "$filter") || {
     # This should only happen if there's been some change to the download endpoint web address
-    if [[ "${lang,,}" == "en" ]] || [[ "${lang,,}" == "en-"* ]]; then
+    if [[ "${lang,,}" == "en" || "${lang,,}" == "en-"* ]]; then
       error "Windows server download page gave us no download link!"
     else
       language=$(getLanguage "$lang" "desc")
@@ -264,28 +265,38 @@ download_windows_eval() {
   }
 
   case "$enterprise_type" in
+    "iot" | "ltsc" )
+      case "${PLATFORM,,}" in
+        "x64" )
+          if [[ "$windows_version" != "windows-10"* ]]; then
+            iso_download_link=$(echo "$iso_download_links" | head -n 1)
+          else
+            iso_download_link=$(echo "$iso_download_links" | head -n 4 | tail -n 1)
+          fi ;;
+        "arm64" )
+          iso_download_link=$(echo "$iso_download_links" | head -n 2 | tail -n 1) ;;
+      esac ;;
     "enterprise" )
-      iso_download_link=$(echo "$iso_download_links" | head -n 2 | tail -n 1)
-      ;;
-    "iot" )
-      if [[ "${PLATFORM,,}" == "x64" ]]; then
-        iso_download_link=$(echo "$iso_download_links" | head -n 1)
-      fi
-      if [[ "${PLATFORM,,}" == "arm64" ]]; then
-        iso_download_link=$(echo "$iso_download_links" | head -n 2 | tail -n 1)
-      fi
-      ;;
-    "ltsc" )
-      iso_download_link=$(echo "$iso_download_links" | head -n 4 | tail -n 1)
-      ;;
+      case "${PLATFORM,,}" in
+        "x64" )
+          if [[ "$windows_version" != "windows-10"* ]]; then
+            iso_download_link=$(echo "$iso_download_links" | head -n 1)
+          else
+            iso_download_link=$(echo "$iso_download_links" | head -n 2 | tail -n 1)
+          fi ;;
+        "arm64" )
+          iso_download_link=$(echo "$iso_download_links" | head -n 2 | tail -n 1) ;;
+      esac ;;
     "server" )
-      iso_download_link=$(echo "$iso_download_links" | head -n 1)
-      ;;
+      case "${PLATFORM,,}" in
+        "x64" )
+          iso_download_link=$(echo "$iso_download_links" | head -n 1) ;;
+      esac ;;
     * )
       error "Invalid type specified, value \"$enterprise_type\" is not recognized!" && return 1 ;;
   esac
 
-  [[ "$DEBUG" == [Yy1]* ]] && echo "Found download link: $iso_download_link"
+  [ -z "$iso_download_link" ] && error "Could not parse download link from page!" && return 1
 
   # Follow redirect so proceeding log message is useful
   # This is a request we make that Fido doesn't
@@ -295,6 +306,30 @@ download_windows_eval() {
     handle_curl_error "$?" "Microsoft"
     return $?
   }
+
+  case "${PLATFORM,,}" in
+    "x64" )
+      if [[ "${iso_download_link,,}" != *"x64"* ]]; then
+        echo "Found download link: $iso_download_link"
+        error "Download link is for the wrong platform? Please report this at $SUPPORT/issues"
+        return 1
+      fi ;;
+    "arm64" )
+      if [[ "${iso_download_link,,}" != *"a64"* && "${iso_download_link,,}" != *"arm64"* ]]; then
+        if [[ "$DEBUG" == [Yy1]* ]]; then
+          echo "Found download link: $iso_download_link"
+          echo "Link for ARM platform currently not available!"
+        fi
+        return 1
+      fi ;;
+  esac
+
+  if [[ "$DEBUG" == [Yy1]* && "$VERIFY" == [Yy1]* && "${lang,,}" == "en"* ]]; then
+    compare=$(getMido "$id" "$lang" "")
+    if [[ "${iso_download_link,,}" != "${compare,,}" ]]; then
+      echo "Retrieved link does not match the fixed link: $compare"
+    fi
+  fi
 
   MIDO_URL="$iso_download_link"
   return 0
@@ -315,7 +350,7 @@ getWindows() {
 
   case "${version,,}" in
     "win2008r2" | "win81${PLATFORM,,}"* | "win11${PLATFORM,,}-enterprise-iot"* | "win11${PLATFORM,,}-enterprise-ltsc"* )
-      if [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-"* ]]; then
+      if [[ "${lang,,}" != "en" && "${lang,,}" != "en-"* ]]; then
         error "No download in the $language language available for $edition!"
         MIDO_URL="" && return 1
       fi ;;
@@ -323,8 +358,7 @@ getWindows() {
 
   case "${version,,}" in
     "win11${PLATFORM,,}" ) ;;
-    "win11${PLATFORM,,}-enterprise-iot"* ) ;;
-    "win11${PLATFORM,,}-enterprise-ltsc"* ) ;;
+    "win11${PLATFORM,,}-enterprise"* ) ;;
     * )
       if [[ "${PLATFORM,,}" != "x64" ]]; then
         error "No download for the ${PLATFORM^^} platform available for $edition!"
@@ -353,6 +387,36 @@ getWindows() {
   return 0
 }
 
+getBuild() {
+
+  local id="$1"
+  local ret="$2"
+  local url=""
+  local name=""
+  local build="$3"
+  local edition=""
+  local file="catalog.xml"
+
+  case "${id,,}" in
+    "win11${PLATFORM,,}" )
+      name="Windows 11 Pro"
+      url="https://worproject.com/dldserv/esd/getcatalog.php?build=${build}&arch=${PLATFORM^^}&edition=Professional" ;;
+    "win11${PLATFORM,,}-enterprise" | "win11${PLATFORM,,}-enterprise-eval")
+      name="Windows 11 Enterprise"
+      url="https://worproject.com/dldserv/esd/getcatalog.php?build=${build}&arch=${PLATFORM^^}&edition=Enterprise" ;;
+  esac
+
+  case "${ret,,}" in
+    "url" ) echo "$url" ;;
+    "file" ) echo "$file" ;;
+    "name" ) echo "$name" ;;
+    "edition" ) echo "$edition" ;;
+    *) echo "";;
+  esac
+
+  return 0
+}
+
 getCatalog() {
 
   local id="$1"
@@ -360,6 +424,12 @@ getCatalog() {
   local url=""
   local name=""
   local edition=""
+  local file="catalog.cab"
+
+  if [[ "${id,,}" == "win11"* ]] && ! isCompatible; then
+    # ARMv8.0 cannot run Windows 11 builds 24H2 and up.
+    getBuild "$1" "$2" "22631.2861" && return 0
+  fi
 
   case "${id,,}" in
     "win11${PLATFORM,,}" )
@@ -382,8 +452,9 @@ getCatalog() {
 
   case "${ret,,}" in
     "url" ) echo "$url" ;;
+    "file" ) echo "$file" ;;
     "name" ) echo "$name" ;;
-    "edition" ) echo "$edition" ;;
+    "edition" ) echo '[Edition="'"${edition}"'"]' ;;
     *) echo "";;
   esac
 
@@ -396,77 +467,115 @@ getESD() {
   local version="$2"
   local lang="$3"
   local desc="$4"
+  local file
+  local result
   local culture
   local language
-  local editionName
-  local winCatalog size
+  local edition
+  local catalog
 
+  file=$(getCatalog "$version" "file")
+  catalog=$(getCatalog "$version" "url")
   culture=$(getLanguage "$lang" "culture")
-  winCatalog=$(getCatalog "$version" "url")
-  editionName=$(getCatalog "$version" "edition")
+  edition=$(getCatalog "$version" "edition")
 
-  if [ -z "$winCatalog" ] || [ -z "$editionName" ]; then
+  if [ -z "$file" ] || [ -z "$catalog" ]; then
     error "Invalid VERSION specified, value \"$version\" is not recognized!" && return 1
   fi
 
-  local msg="Downloading product information from Microsoft server..."
+  local msg="Downloading catalog..."
   info "$msg" && html "$msg"
 
   rm -rf "$dir"
-  mkdir -p "$dir"
 
-  local wFile="catalog.cab"
+  if ! makeDir "$dir"; then
+    error "Failed to create directory \"$dir\" !" && return 1
+  fi
+  
   local xFile="products.xml"
   local eFile="esd_edition.xml"
   local fFile="products_filter.xml"
 
-  { wget "$winCatalog" -O "$dir/$wFile" -q --timeout=30 --no-http-keep-alive; rc=$?; } || :
+  { wget "$catalog" -O "$dir/$file" -q --timeout=30 --no-http-keep-alive; rc=$?; } || :
 
-  msg="Failed to download $winCatalog"
+  msg="Failed to download $catalog"
   (( rc == 3 )) && error "$msg , cannot write file (disk full?)" && return 1
   (( rc == 4 )) && error "$msg , network failure!" && return 1
   (( rc == 8 )) && error "$msg , server issued an error response!" && return 1
   (( rc != 0 )) && error "$msg , reason: $rc" && return 1
 
-  cd "$dir"
+  if [[ "$file" == *".xml" ]]; then
 
-  if ! cabextract "$wFile" > /dev/null; then
+    mv -f "$dir/$file" "$dir/$xFile"
+
+  else
+
+    cd "$dir"
+
+    if ! cabextract "$file" > /dev/null; then
+      cd /run
+      error "Failed to extract $file!" && return 1
+    fi
+
     cd /run
-    error "Failed to extract $wFile!" && return 1
-  fi
 
-  cd /run
+  fi
 
   if [ ! -s "$dir/$xFile" ]; then
-    error "Failed to find $xFile in $wFile!" && return 1
+    error "Failed to find $xFile in $file!" && return 1
   fi
 
-  local edQuery='//File[Architecture="'${PLATFORM}'"][Edition="'${editionName}'"]'
+  local edQuery='//File[Architecture="'${PLATFORM,,}'"]'"${edition}"''
+  result=$(xmllint --nonet --xpath "${edQuery}" "$dir/$xFile" 2>/dev/null)
+
+  if [ -z "$result" ]; then
+
+    edQuery='//File[Architecture="'${PLATFORM^^}'"]'"${edition}"''
+
+    result=$(xmllint --nonet --xpath "${edQuery}" "$dir/$xFile" 2>/dev/null)
+
+    if [ -z "$result" ]; then
+      desc=$(printEdition "$version" "$desc")
+      language=$(getLanguage "$lang" "desc")
+      error "No download link available for $desc!" && return 1
+    fi
+
+  fi
 
   echo -e '<Catalog>' > "$dir/$fFile"
-  xmllint --nonet --xpath "${edQuery}" "$dir/$xFile" >> "$dir/$fFile" 2>/dev/null
+  echo "$result" >> "$dir/$fFile"
   echo -e '</Catalog>'>> "$dir/$fFile"
 
-  xmllint --nonet --xpath "//File[LanguageCode=\"${culture,,}\"]" "$dir/$fFile" >"$dir/$eFile"
+  result=$(xmllint --nonet --xpath "//File[LanguageCode=\"${culture,,}\"]" "$dir/$fFile" 2>/dev/null)
 
-  size=$(stat -c%s "$dir/$eFile")
-  if ((size<20)); then
+  if [ -z "$result" ]; then
     desc=$(printEdition "$version" "$desc")
     language=$(getLanguage "$lang" "desc")
     error "No download in the $language language available for $desc!" && return 1
   fi
 
+  echo "$result" > "$dir/$eFile"
+
   local tag="FilePath"
-  ESD=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g")
+  ESD=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g" 2>/dev/null)
 
   if [ -z "$ESD" ]; then
     error "Failed to find ESD URL in $eFile!" && return 1
   fi
 
   tag="Sha1"
-  ESD_SUM=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g")
+  ESD_SUM=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g" 2>/dev/null)
+
+  if [ -z "$ESD_SUM" ]; then
+    error "Failed to find ESD checksum in $eFile!" && return 1
+  fi
+
   tag="Size"
-  ESD_SIZE=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g")
+  ESD_SIZE=$(xmllint --nonet --xpath "//$tag" "$dir/$eFile" | sed -E -e "s/<[\/]?$tag>//g" 2>/dev/null)
+
+  if [ -z "$ESD_SIZE" ]; then
+    error "Failed to find ESD filesize in $eFile!" && return 1
+  fi
 
   rm -rf "$dir"
   return 0
@@ -491,8 +600,8 @@ verifyFile() {
   local total="$3"
   local check="$4"
 
-  if [ -n "$size" ] && [[ "$total" != "$size" ]] && [[ "$size" != "0" ]]; then
-    if [[ "$VERIFY" == [Yy1]* ]] || [[ "$DEBUG" == [Yy1]* ]]; then
+  if [ -n "$size" ] && [[ "$total" != "$size" && "$size" != "0" ]]; then
+    if [[ "$VERIFY" == [Yy1]* || "$DEBUG" == [Yy1]* ]]; then
       warn "The downloaded file has a different size ( $total bytes) than expected ( $size bytes). Please report this at $SUPPORT/issues"
     fi
   fi
@@ -532,7 +641,6 @@ downloadFile() {
   local msg="Downloading $desc"
   local rc total total_gb progress domain dots agent space folder
 
-  rm -f "$iso"
   agent=$(get_agent)
 
   if [ -n "$size" ] && [[ "$size" != "0" ]]; then
@@ -561,8 +669,9 @@ downloadFile() {
   fi
 
   info "$msg..."
+  [[ "$DEBUG" == [Yy1]* ]] && echo "Downloading: $url"
 
-  { wget "$url" -O "$iso" -q --timeout=30 --no-http-keep-alive --user-agent "$agent" --show-progress "$progress"; rc=$?; } || :
+  { wget "$url" -O "$iso" --continue -q --timeout=30 --no-http-keep-alive --user-agent "$agent" --show-progress "$progress"; rc=$?; } || :
 
   fKill "progress.sh"
 
@@ -586,23 +695,40 @@ downloadFile() {
   return 1
 }
 
+delay() {
+
+  local i
+  local delay="$1"
+  local msg="Will retry in X seconds..."
+
+  info "${msg/X/$delay}"
+
+  for i in $(seq "$delay" -1 1); do
+    html "${msg/X/$i}"
+    sleep 1
+  done
+
+  return 0
+}
+
 downloadImage() {
 
   local iso="$1"
   local version="$2"
   local lang="$3"
-  local delay=5
   local tried="n"
   local success="n"
+  local seconds="5"
   local url sum size base desc language
-  local msg="Will retry after $delay seconds..."
 
   if [[ "${version,,}" == "http"* ]]; then
 
     base=$(basename "$iso")
     desc=$(fromFile "$base")
+
+    rm -f "$iso"
     downloadFile "$iso" "$version" "" "" "" "$desc" && return 0
-    info "$msg" && html "$msg" && sleep "$delay"
+    delay "$seconds"
     downloadFile "$iso" "$version" "" "" "" "$desc" && return 0
     rm -f "$iso"
 
@@ -615,7 +741,7 @@ downloadImage() {
 
   desc=$(printVersion "$version" "")
 
-  if [[ "${lang,,}" != "en" ]] && [[ "${lang,,}" != "en-"* ]]; then
+  if [[ "${lang,,}" != "en" && "${lang,,}" != "en-"* ]]; then
     language=$(getLanguage "$lang" "desc")
     if ! validVersion "$version" "$lang"; then
       desc=$(printEdition "$version" "$desc")
@@ -632,15 +758,17 @@ downloadImage() {
     if getWindows "$version" "$lang" "$desc"; then
       success="y"
     else
-      info "$msg" && html "$msg" && sleep "$delay"
+      delay "$seconds"
       getWindows "$version" "$lang" "$desc" && success="y"
     fi
 
     if [[ "$success" == "y" ]]; then
       size=$(getMido "$version" "$lang" "size" )
       sum=$(getMido "$version" "$lang" "sum")
+
+      rm -f "$iso"
       downloadFile "$iso" "$MIDO_URL" "$sum" "$size" "$lang" "$desc" && return 0
-      info "$msg" && html "$msg" && sleep "$delay"
+      delay "$seconds"
       downloadFile "$iso" "$MIDO_URL" "$sum" "$size" "$lang" "$desc" && return 0
       rm -f "$iso"
     fi
@@ -651,7 +779,7 @@ downloadImage() {
   if isESD "$version" "$lang"; then
 
     if [[ "$tried" != "n" ]]; then
-      info "Failed to download $desc, will try a diferent method now..."
+      info "Failed to download $desc, will try a different method now..."
     fi
 
     tried="y"
@@ -660,14 +788,16 @@ downloadImage() {
     if getESD "$TMP/esd" "$version" "$lang" "$desc"; then
       success="y"
     else
-      info "$msg" && html "$msg" && sleep "$delay"
+      delay "$seconds"
       getESD "$TMP/esd" "$version" "$lang" "$desc" && success="y"
     fi
 
     if [[ "$success" == "y" ]]; then
       ISO="${ISO%.*}.esd"
+
+      rm -f "$ISO"
       downloadFile "$ISO" "$ESD" "$ESD_SUM" "$ESD_SIZE" "$lang" "$desc" && return 0
-      info "$msg" && html "$msg" && sleep "$delay"
+      delay "$seconds"
       downloadFile "$ISO" "$ESD" "$ESD_SUM" "$ESD_SIZE" "$lang" "$desc" && return 0
       rm -f "$ISO"
       ISO="$iso"
@@ -680,14 +810,18 @@ downloadImage() {
     url=$(getLink "$i" "$version" "$lang")
 
     if [ -n "$url" ]; then
+
       if [[ "$tried" != "n" ]]; then
         info "Failed to download $desc, will try another mirror now..."
       fi
+
       tried="y"
       size=$(getSize "$i" "$version" "$lang")
       sum=$(getHash "$i" "$version" "$lang")
+
+      rm -f "$iso"
       downloadFile "$iso" "$url" "$sum" "$size" "$lang" "$desc" && return 0
-      info "$msg" && html "$msg" && sleep "$delay"
+      delay "$seconds"
       downloadFile "$iso" "$url" "$sum" "$size" "$lang" "$desc" && return 0
       rm -f "$iso"
     fi
